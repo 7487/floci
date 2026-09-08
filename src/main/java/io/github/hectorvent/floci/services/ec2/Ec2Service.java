@@ -4493,6 +4493,12 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider {
         return launchTemplate;
     }
 
+    /**
+     * EC2 spells the two not-found codes asymmetrically —
+     * {@code InvalidLaunchTemplateName.NotFoundException} but {@code InvalidLaunchTemplateId.NotFound},
+     * no suffix. Both are reproduced as AWS emits them; making them consistent would break clients
+     * such as Karpenter, which match on the exact strings.
+     */
     private LaunchTemplate findLaunchTemplate(String region, String id, String name) {
         if (id != null && !id.isBlank()) {
             LaunchTemplate launchTemplate = launchTemplates.get(key(region, id)).orElse(null);
@@ -4506,7 +4512,7 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider {
                     .orElseThrow(() -> new AwsException("InvalidLaunchTemplateName.NotFoundException",
                             "The specified launch template does not exist.", 400));
         }
-        throw new AwsException("InvalidLaunchTemplateId.NotFoundException",
+        throw new AwsException("InvalidLaunchTemplateId.NotFound",
                 "The specified launch template does not exist.", 400);
     }
 

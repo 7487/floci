@@ -430,6 +430,31 @@ class Ec2ServiceTest {
     }
 
     @Test
+    void missingLaunchTemplateIdReportsTheSameCodeWhicheverCallLooksItUp() {
+        Ec2Service service = new Ec2Service(mockConfig(true), mock(Ec2ContainerManager.class),
+                mock(Ec2PortForwardManager.class),
+                mock(AmiImageResolver.class), mock(Ec2ImageCatalog.class), new Ec2InstanceTypeCatalog(),
+                new InMemoryStorageFactory());
+
+        // The mutating paths resolve the template through findLaunchTemplate rather than
+        // describeLaunchTemplates, and used to spell the same condition
+        // InvalidLaunchTemplateId.NotFoundException.
+        AwsException modify = assertThrows(AwsException.class, () -> service.modifyLaunchTemplate(
+                "us-east-1", "lt-0000000000000dead", null, "1"));
+        assertEquals("InvalidLaunchTemplateId.NotFound", modify.getErrorCode());
+        assertEquals(400, modify.getHttpStatus());
+
+        AwsException delete = assertThrows(AwsException.class, () -> service.deleteLaunchTemplate(
+                "us-east-1", "lt-0000000000000dead", null));
+        assertEquals("InvalidLaunchTemplateId.NotFound", delete.getErrorCode());
+
+        // A missing name keeps the Exception suffix EC2 uses on that one.
+        AwsException byName = assertThrows(AwsException.class, () -> service.deleteLaunchTemplate(
+                "us-east-1", null, "absent-template"));
+        assertEquals("InvalidLaunchTemplateName.NotFoundException", byName.getErrorCode());
+    }
+
+    @Test
     void launchTemplateVersionInheritsOmittedFieldsFromRequestedSourceVersion() {
         Ec2Service service = new Ec2Service(mockConfig(true), mock(Ec2ContainerManager.class),
                 mock(Ec2PortForwardManager.class),
