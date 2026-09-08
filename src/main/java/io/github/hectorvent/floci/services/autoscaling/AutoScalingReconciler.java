@@ -36,6 +36,10 @@ public class AutoScalingReconciler {
 
     private static final Logger LOG = Logger.getLogger(AutoScalingReconciler.class);
 
+    /** The codes DescribeLaunchTemplates raises for an explicit name or id that does not exist. */
+    private static final Set<String> LAUNCH_TEMPLATE_NOT_FOUND_CODES =
+            Set.of("InvalidLaunchTemplateName.NotFoundException", "InvalidLaunchTemplateId.NotFound");
+
     private final AutoScalingService asgService;
     private final Ec2Service ec2Service;
     private final ElbV2Service elbV2Service;
@@ -561,6 +565,8 @@ public class AutoScalingReconciler {
      * The launch template a group points at, or null when it is gone. DescribeLaunchTemplates
      * reports an explicitly requested name or id that does not exist as an error, which must not
      * abort a reconcile pass: a group whose template was deleted simply has nothing to launch from.
+     * Only those NotFound codes read as "gone"; any other failure propagates rather than quietly
+     * skipping the group's scaling.
      */
     private LaunchTemplate lookupLaunchTemplate(AutoScalingGroup asg, String ltId, String ltName) {
         try {
@@ -571,6 +577,9 @@ public class AutoScalingReconciler {
                     Map.of());
             return launchTemplates.isEmpty() ? null : launchTemplates.get(0);
         } catch (AwsException e) {
+            if (!LAUNCH_TEMPLATE_NOT_FOUND_CODES.contains(e.getErrorCode())) {
+                throw e;
+            }
             LOG.debugv("ASG {0}: launch template {1} is gone: {2}",
                     asg.getAutoScalingGroupName(),
                     ltId == null || ltId.isBlank() ? ltName : ltId,
