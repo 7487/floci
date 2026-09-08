@@ -1,5 +1,6 @@
 package io.github.hectorvent.floci.services.autoscaling;
 
+import io.github.hectorvent.floci.core.common.AwsException;
 import io.github.hectorvent.floci.services.autoscaling.model.AsgInstance;
 import io.github.hectorvent.floci.services.autoscaling.model.AutoScalingGroup;
 import io.github.hectorvent.floci.services.autoscaling.model.LaunchConfiguration;
@@ -553,12 +554,29 @@ public class AutoScalingReconciler {
         if ((ltId == null || ltId.isBlank()) && (ltName == null || ltName.isBlank())) {
             return null;
         }
-        List<LaunchTemplate> launchTemplates = ec2Service.describeLaunchTemplates(
-                asg.getRegion(),
-                ltId == null || ltId.isBlank() ? List.of() : List.of(ltId),
-                ltName == null || ltName.isBlank() ? List.of() : List.of(ltName),
-                Map.of());
-        return launchTemplates.isEmpty() ? null : launchTemplates.get(0);
+        return lookupLaunchTemplate(asg, ltId, ltName);
+    }
+
+    /**
+     * The launch template a group points at, or null when it is gone. DescribeLaunchTemplates
+     * reports an explicitly requested name or id that does not exist as an error, which must not
+     * abort a reconcile pass: a group whose template was deleted simply has nothing to launch from.
+     */
+    private LaunchTemplate lookupLaunchTemplate(AutoScalingGroup asg, String ltId, String ltName) {
+        try {
+            List<LaunchTemplate> launchTemplates = ec2Service.describeLaunchTemplates(
+                    asg.getRegion(),
+                    ltId == null || ltId.isBlank() ? List.of() : List.of(ltId),
+                    ltName == null || ltName.isBlank() ? List.of() : List.of(ltName),
+                    Map.of());
+            return launchTemplates.isEmpty() ? null : launchTemplates.get(0);
+        } catch (AwsException e) {
+            LOG.debugv("ASG {0}: launch template {1} is gone: {2}",
+                    asg.getAutoScalingGroupName(),
+                    ltId == null || ltId.isBlank() ? ltName : ltId,
+                    e.getMessage());
+            return null;
+        }
     }
 
     private MixedInstancesPolicy.LaunchTemplateSpecification mixedInstancesLaunchTemplateSpecification(
@@ -582,14 +600,8 @@ public class AutoScalingReconciler {
 
     private LaunchTemplate resolveMixedInstancesLaunchTemplate(
             AutoScalingGroup asg, MixedInstancesPolicy.LaunchTemplateSpecification specification) {
-        String ltId = specification.getLaunchTemplateId();
-        String ltName = specification.getLaunchTemplateName();
-        List<LaunchTemplate> launchTemplates = ec2Service.describeLaunchTemplates(
-                asg.getRegion(),
-                ltId == null || ltId.isBlank() ? List.of() : List.of(ltId),
-                ltName == null || ltName.isBlank() ? List.of() : List.of(ltName),
-                Map.of());
-        return launchTemplates.isEmpty() ? null : launchTemplates.get(0);
+        return lookupLaunchTemplate(
+                asg, specification.getLaunchTemplateId(), specification.getLaunchTemplateName());
     }
 
     private String mixedInstancesInstanceType(AutoScalingGroup asg, LaunchTemplate version) {
