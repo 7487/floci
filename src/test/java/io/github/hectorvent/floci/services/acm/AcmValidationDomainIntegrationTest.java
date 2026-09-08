@@ -88,6 +88,36 @@ class AcmValidationDomainIntegrationTest {
             .body("__type", Matchers.equalTo("InvalidDomainValidationOptionsException"));
     }
 
+    @Test
+    void entryWithoutAValidationDomainIsRejected() {
+        requestCertificate("""
+            {
+                "DomainName": "probe.incomplete.validation-domain.test",
+                "ValidationMethod": "EMAIL",
+                "DomainValidationOptions": [
+                    {"DomainName": "probe.incomplete.validation-domain.test"}
+                ]
+            }
+            """)
+            .statusCode(400)
+            .body("__type", Matchers.equalTo("InvalidDomainValidationOptionsException"));
+    }
+
+    @Test
+    void entryWithoutADomainNameIsRejected() {
+        requestCertificate("""
+            {
+                "DomainName": "probe.nameless.validation-domain.test",
+                "ValidationMethod": "EMAIL",
+                "DomainValidationOptions": [
+                    {"ValidationDomain": "validation-domain.test"}
+                ]
+            }
+            """)
+            .statusCode(400)
+            .body("__type", Matchers.equalTo("InvalidDomainValidationOptionsException"));
+    }
+
     private static io.restassured.response.ValidatableResponse requestCertificate(String body) {
         return given()
             .header("X-Amz-Target", "CertificateManager.RequestCertificate")

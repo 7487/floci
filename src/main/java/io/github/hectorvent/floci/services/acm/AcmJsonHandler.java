@@ -508,18 +508,24 @@ public class AcmJsonHandler {
 
     /**
      * Reads the requested {@code DomainValidationOptions} into a {@code ValidationDomain} per
-     * {@code DomainName}. Incomplete entries are skipped, so a caller that omits {@code ValidationDomain}
-     * keeps the default of validating the domain against itself.
+     * {@code DomainName}. Both members are required, so an entry missing either is rejected rather
+     * than dropped back to the default of validating the domain against itself.
      */
     private Map<String, String> parseDomainValidationOptions(JsonNode optionsNode) {
-        if (!optionsNode.isArray()) return Map.of();
+        if (!optionsNode.isArray()) {
+            return Map.of();
+        }
         Map<String, String> validationDomains = new LinkedHashMap<>();
         for (JsonNode option : optionsNode) {
             String domainName = option.path("DomainName").asText(null);
             String validationDomain = option.path("ValidationDomain").asText(null);
-            if (domainName != null && !domainName.isBlank() && validationDomain != null && !validationDomain.isBlank()) {
-                validationDomains.put(domainName, validationDomain);
+            if (domainName == null || domainName.isBlank() || validationDomain == null || validationDomain.isBlank()) {
+                throw new io.github.hectorvent.floci.core.common.AwsException(
+                    "InvalidDomainValidationOptionsException",
+                    "One or more values in the DomainValidationOption structure is incorrect.",
+                    400);
             }
+            validationDomains.put(domainName, validationDomain);
         }
         return validationDomains;
     }
