@@ -88,6 +88,20 @@ class AslExecutorStatePathTest {
     }
 
     @Test
+    void choiceDefaultRouteAppliesOutputPath() throws Exception {
+        assertOutput("""
+                {"StartAt":"Pick","States":{
+                  "Pick":{"Type":"Choice","OutputPath":"$.visible",
+                    "Choices":[{"Variable":"$.route","StringEquals":"yes","Next":"Wrong"}],
+                    "Default":"Done"},
+                  "Done":{"Type":"Pass","End":true},
+                  "Wrong":{"Type":"Fail","Error":"WrongBranch"}}}
+                """,
+                "{\"route\":\"no\",\"visible\":{\"kept\":true},\"hidden\":9}",
+                "{\"kept\":true}");
+    }
+
+    @Test
     void waitInputPathFeedsSecondsPath() throws Exception {
         assertOutput("""
                 {"StartAt":"Wait","States":{
@@ -127,6 +141,18 @@ class AslExecutorStatePathTest {
                 """,
                 "{\"scoped\":{\"value\":\"right\"},\"outside\":9}",
                 "{\"scoped\":{\"value\":\"right\"},\"outside\":9,\"branches\":[{\"value\":\"right\"}]}");
+    }
+
+    @Test
+    void parallelOutputPathFiltersMergedResult() throws Exception {
+        assertOutput("""
+                {"StartAt":"Parallel","States":{
+                  "Parallel":{"Type":"Parallel","ResultPath":"$.branches","OutputPath":"$.branches",
+                    "Branches":[{"StartAt":"Copy","States":{"Copy":{"Type":"Pass","End":true}}}],
+                    "End":true}}}
+                """,
+                "{\"value\":\"right\",\"outside\":9}",
+                "[{\"value\":\"right\",\"outside\":9}]");
     }
 
     private void assertOutput(String definition, String input, String expected) throws Exception {
